@@ -211,8 +211,8 @@
             const [isSelecting, setIsSelecting] = useState(false);
             const [startCell, setStartCell] = useState(null);
             
-            // État pour mémoriser les lettres du message secret qui ont été cliquées
-            const [clickedSecretIndices, setClickedSecretIndices] = useState(new Set());
+            // État pour mémoriser toutes les lettres individuelles cliquées (bonnes ou fausses)
+            const [clickedCells, setClickedCells] = useState(new Set());
 
             // Palette de couleurs pour le corrigé
             const COLORS = ['bg-pastel-blue', 'bg-pastel-pink', 'bg-pastel-yellow', 'bg-pastel-purple', 'bg-pastel-orange'];
@@ -253,23 +253,21 @@
                 if (!isSelecting) return;
                 setIsSelecting(false);
                 
-                // Gérer le simple clic pour les lettres du message secret
+                // Gérer le simple clic pour toutes les lettres (permet de cocher/décocher n'importe quelle case)
                 if (selectionLine.length === 1) {
                     const clickedCoord = selectionLine[0];
-                    const secretIndex = puzzle.secretMessageCells.indexOf(clickedCoord);
                     
-                    if (secretIndex !== -1) {
-                        setClickedSecretIndices(prev => {
-                            const newSet = new Set(prev);
-                            // Si la lettre est déjà sélectionnée, on la retire. Sinon, on l'ajoute.
-                            if (newSet.has(secretIndex)) {
-                                newSet.delete(secretIndex);
-                            } else {
-                                newSet.add(secretIndex);
-                            }
-                            return newSet;
-                        });
-                    }
+                    setClickedCells(prev => {
+                        const newSet = new Set(prev);
+                        // Si la lettre est déjà sélectionnée, on la retire. Sinon, on l'ajoute.
+                        if (newSet.has(clickedCoord)) {
+                            newSet.delete(clickedCoord);
+                        } else {
+                            newSet.add(clickedCoord);
+                        }
+                        return newSet;
+                    });
+                    
                     setSelectionLine([]);
                     setStartCell(null);
                     return;
@@ -401,9 +399,8 @@
                                                 if (isSelected) bgColor = 'bg-brand/30 rounded-md';
                                                 else if (isFound) bgColor = 'bg-brand/20 rounded-md ring-2 ring-brand/50';
                                                 
-                                                // Colorer en VERT la lettre secrète cliquée
-                                                const secretIdx = puzzle.secretMessageCells.indexOf(cellCoord);
-                                                if (secretIdx !== -1 && clickedSecretIndices.has(secretIdx)) {
+                                                // Colorer en VERT la lettre si cliquée (qu'elle soit bonne ou fausse)
+                                                if (clickedCells.has(cellCoord)) {
                                                     textColor = 'text-emerald-700';
                                                     bgColor = 'bg-emerald-100';
                                                     fontWeight = 'font-extrabold';
@@ -468,7 +465,9 @@
                                             <div key={wIdx} className="flex gap-1.5 bg-white/80 p-1.5 rounded-lg border border-emerald-200 shadow-sm">
                                                 {word.split('').map((char, cIdx) => {
                                                     const currentAbsIndex = charAbsIndex++;
-                                                    const isRevealed = isCorrection || clickedSecretIndices.has(currentAbsIndex);
+                                                    const targetCoord = puzzle.secretMessageCells[currentAbsIndex];
+                                                    // Si isCorrection n'existe plus, on vérifie simplement les cellules cliquées
+                                                    const isRevealed = clickedCells.has(targetCoord);
                                                     return (
                                                         <div 
                                                             key={cIdx} 
