@@ -3,518 +3,574 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Générateur - Mot Mystère Rentrée</title>
+    <title>Mot Mystère : Le Monde des Animaux</title>
     
-    <!-- Tailwind CSS pour le style -->
+    <!-- Polices -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Inter:wght@400;600;700&family=Quicksand:wght@500;700&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    
-    <!-- React & ReactDOM (versions de production) -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        'title': ['"Fredoka One"', 'cursive'],
+                        'body': ['Inter', 'sans-serif'],
+                        'handwriting': ['Quicksand', 'sans-serif'],
+                        'mono': ['Courier New', 'monospace']
+                    },
+                    colors: {
+                        brand: {
+                            light: '#f0fdf4', // vert pastel
+                            DEFAULT: '#22c55e', // vert animal
+                            dark: '#166534',
+                        },
+                        pastel: {
+                            blue: '#bfdbfe',
+                            pink: '#fbcfe8',
+                            yellow: '#fef08a',
+                            purple: '#e9d5ff',
+                            orange: '#fed7aa'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- React & Babel & html2canvas -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
-    
-    <!-- Babel pour compiler le JSX directement dans le navigateur -->
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-
-    <!-- html2canvas pour la capture d'image -->
+    <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+    <style>
+        body {
+            background-color: #f3f4f6;
+            margin: 0;
+            font-family: 'Inter', sans-serif;
+        }
+
+        /* Dimension absolue pour garantir le format papier (Proche Letter US / A4) */
+        .page-container {
+            width: 816px; 
+            height: 1056px;
+            background-color: white;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+            margin: 0 auto;
+            position: relative;
+            overflow: hidden;
+            box-sizing: border-box;
+        }
+
+        /* Responsive wrapper pour l'écran */
+        .responsive-wrapper {
+            width: 100%;
+            overflow-x: auto;
+            padding: 1.5rem 1rem;
+            display: flex;
+            justify-content: center;
+        }
+
+        /* Empêcher la sélection de texte native dans la grille pour l'interactivité */
+        .grid-container {
+            user-select: none;
+            touch-action: none; /* Crucial pour le mobile */
+        }
+
+        /* Animations simples */
+        .word-strike {
+            text-decoration: line-through;
+            color: #9ca3af;
+            transition: all 0.3s ease;
+        }
+    </style>
 </head>
 <body>
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect } = React;
+        const { useState, useEffect, useRef, useMemo } = React;
 
-        // --- CONFIGURATION PÉDAGOGIQUE ET ÉDITORIALE ---
-        const NIVEAU = "4e année";
-        const THEME = "La Rentrée Scolaire";
-        const TEMPS_ESTIME = "15 min";
-        const MOTS_A_TROUVER = [
-          "CARTABLE", "CRAYON", "GOMME", "CAHIER", "TABLEAU", 
-          "CLOCHE", "PROFESSEUR", "RECREATION", "DEVOIRS", "TROUSSE", 
-          "REGLE", "LECTURE", "ECOLE", "CALCUL", "CLASSE", 
-          "PUPITRE", "ELEVE", "STYLO", "LIVRE", "CISEAUX"
-        ];
+        // --- DONNÉES PÉDAGOGIQUES ---
+        const VOCABULARY = [
+            "ACCORD", "DEBUT", "DESERT", "DIFFERENT", "FORT", 
+            "FROID", "GOUT", "GRAND", "PLAT", "PRET", 
+            "PROFOND", "SOLDAT", "SUIVANT", "TOUT", "VIVANT", 
+            "LION", "DAUPHIN", "GIRAFE", "LIEVRE", "SERPENT"
+        ].sort(); // Tri alphabétique pour la liste
 
-        /* Générateur dynamique de phrase parfaite selon les cases restantes */
-        const buildExactPhrase = (targetLen) => {
-          const parts = [
-            ["BRAVO", "SUPER", "GENIAL"],
-            ["TU AS TROUVE", "TU AS DECOUVERT", "TU AS REUSSI A TROUVER"],
-            ["TOUS LES MOTS", "LES MOTS"],
-            ["CACHES", "SECRETS", ""],
-            ["DANS LA GRILLE", "DE CETTE GRILLE", ""],
-            ["NOUS TE SOUHAITONS", "ON TE SOUHAITE", "PASSE"],
-            ["UNE BONNE", "UNE TRES BONNE", "UNE BELLE", "UNE EXCELLENTE", "UNE SUPERBE"],
-            ["RENTREE", "RENTREE SCOLAIRE", "ANNEE", "ANNEE SCOLAIRE"]
-          ];
-          
-          let foundPhrase = null;
-          // Mélanger pour obtenir des phrases variées à chaque génération
-          const shuffledParts = parts.map(arr => [...arr].sort(() => Math.random() - 0.5));
+        const SECRET_MESSAGE = "LES ANIMAUX SONT MERVEILLEUX";
+        const SECRET_MESSAGE_CLEAN = SECRET_MESSAGE.replace(/\s/g, ''); // 25 lettres
+        const PADDING_TEXT = "PROTEGEONSLAFORETETLOUSCEANCARCHAQUEVIESAUVAGEESTPRECIEUSEPOURNORTEBELLEPLANETENATURELLEETMAGIQUE";
+        
+        const GRID_SIZE = 14;
 
-          const dfs = (partIndex, currentPhrase, currentLen) => {
-            if (foundPhrase) return;
-            if (partIndex === shuffledParts.length) {
-              if (currentLen === targetLen) {
-                foundPhrase = currentPhrase.trim().replace(/\s+/g, ' ');
-              }
-              return;
-            }
-            for (let word of shuffledParts[partIndex]) {
-              let wLen = word.replace(/ /g, '').length;
-              dfs(partIndex + 1, currentPhrase + (word ? " " + word : ""), currentLen + wLen);
-            }
-          };
-          
-          dfs(0, "", 0);
-          return foundPhrase;
-        };
+        // --- GÉNÉRATEUR DE GRILLE (ALGORITHME) ---
+        function generatePuzzle() {
+            let grid = Array(GRID_SIZE).fill(null).map(() => Array(GRID_SIZE).fill(null));
+            let placedWords = [];
+            let cellWordMap = Array(GRID_SIZE).fill(null).map(() => Array(GRID_SIZE).fill([]));
 
-        const TAILLE_GRILLE = 14;
+            const directions = [
+                [0, 1], [1, 0], [1, 1], [-1, 1], // Horiz, Vert, Diag Desc, Diag Asc
+                [0, -1], [-1, 0], [-1, -1], [1, -1] // Mêmes directions inversées
+            ];
 
-        // Directions pour placer les mots (Horizontale, Verticale, Diagonales)
-        const DIRECTIONS = [
-          [0, 1],   // Droite
-          [1, 0],   // Bas
-          [1, 1],   // Diagonale Bas-Droite
-          [-1, 1],  // Diagonale Haut-Droite
-          [0, -1],  // Gauche (Inversé)
-          [-1, 0],  // Haut (Inversé)
-        ];
+            // Trier les mots du plus long au plus court facilite le placement
+            const wordsToPlace = [...VOCABULARY].sort((a, b) => b.length - a.length);
 
-        // --- ALGORITHME DE GÉNÉRATION DE LA GRILLE ---
-        const genererGrille = () => {
-          let grille = [];
-          let motsPlaces = [];
-          let tentatives = 0;
-          let succes = false;
-          let phraseSecreteExacte = "";
+            wordsToPlace.forEach(word => {
+                let placed = false;
+                let attempts = 0;
+                
+                while (!placed && attempts < 500) {
+                    attempts++;
+                    const dir = directions[Math.floor(Math.random() * directions.length)];
+                    const row = Math.floor(Math.random() * GRID_SIZE);
+                    const col = Math.floor(Math.random() * GRID_SIZE);
 
-          // Trier les mots par longueur (les plus longs en premier pour optimiser le placement)
-          const motsTries = [...MOTS_A_TROUVER].sort((a, b) => b.length - a.length);
+                    const endRow = row + dir[0] * (word.length - 1);
+                    const endCol = col + dir[1] * (word.length - 1);
 
-          while (!succes && tentatives < 500) {
-            grille = Array(TAILLE_GRILLE).fill(null).map(() => Array(TAILLE_GRILLE).fill(''));
-            motsPlaces = [];
-            succes = true;
+                    // Vérifier si le mot rentre dans la grille
+                    if (endRow >= 0 && endRow < GRID_SIZE && endCol >= 0 && endCol < GRID_SIZE) {
+                        let canPlace = true;
+                        for (let i = 0; i < word.length; i++) {
+                            const r = row + dir[0] * i;
+                            const c = col + dir[1] * i;
+                            if (grid[r][c] !== null && grid[r][c] !== word[i]) {
+                                canPlace = false;
+                                break;
+                            }
+                        }
 
-            for (const mot of motsTries) {
-              let motPlace = false;
-              for (let i = 0; i < 200; i++) {
-                const dir = DIRECTIONS[Math.floor(Math.random() * DIRECTIONS.length)];
-                const row = Math.floor(Math.random() * TAILLE_GRILLE);
-                const col = Math.floor(Math.random() * TAILLE_GRILLE);
-
-                if (peutPlacerMot(grille, mot, row, col, dir)) {
-                  placerMot(grille, mot, row, col, dir, motsPlaces);
-                  motPlace = true;
-                  break;
+                        if (canPlace) {
+                            let wordCells = [];
+                            for (let i = 0; i < word.length; i++) {
+                                const r = row + dir[0] * i;
+                                const c = col + dir[1] * i;
+                                grid[r][c] = word[i];
+                                wordCells.push(`${r},${c}`);
+                            }
+                            placedWords.push({ word, cells: wordCells });
+                            placed = true;
+                        }
+                    }
                 }
-              }
-              if (!motPlace) {
-                succes = false;
-                break; // Échec de placement, on recommence
-              }
-            }
+                if (!placed) console.warn(`Impossible de placer le mot : ${word}`);
+            });
 
-            if (succes) {
-              // Calcul du nombre de cases vides restantes
-              let casesVides = 0;
-              for (let r = 0; r < TAILLE_GRILLE; r++) {
-                for (let c = 0; c < TAILLE_GRILLE; c++) {
-                  if (grille[r][c] === '') casesVides++;
+            // Remplir les cases vides avec le message secret puis le texte de remplissage
+            let messagePool = SECRET_MESSAGE_CLEAN + PADDING_TEXT;
+            let poolIndex = 0;
+            let secretMessageCells = []; // Garder une trace des cases du vrai message secret
+
+            for (let r = 0; r < GRID_SIZE; r++) {
+                for (let c = 0; c < GRID_SIZE; c++) {
+                    if (grid[r][c] === null) {
+                        grid[r][c] = messagePool[poolIndex % messagePool.length];
+                        if (poolIndex < SECRET_MESSAGE_CLEAN.length) {
+                            secretMessageCells.push(`${r},${c}`);
+                        }
+                        poolIndex++;
+                    }
                 }
-              }
-              
-              // L'algorithme cherche une combinaison parfaite de mots pour combler EXACTEMENT ce trou
-              phraseSecreteExacte = buildExactPhrase(casesVides);
-              
-              if (!phraseSecreteExacte) {
-                succes = false; // Aucune phrase parfaite trouvée pour ce nombre de cases, on regénère une grille
-              }
             }
-            tentatives++;
-          }
 
-          // Remplissage des cases restantes avec la phrase mystère EXACTE trouvée
-          const phraseSecreteSansEspaces = phraseSecreteExacte.replace(/ /g, '');
+            return { grid, placedWords, secretMessageCells };
+        }
 
-          let indexPhrase = 0;
-          for (let r = 0; r < TAILLE_GRILLE; r++) {
-            for (let c = 0; c < TAILLE_GRILLE; c++) {
-              if (grille[r][c] === '') {
-                grille[r][c] = { lettre: phraseSecreteSansEspaces[indexPhrase], type: 'mystere' };
-                indexPhrase++;
-              }
-            }
-          }
+        // --- COMPOSANT ICÔNES (SVG Inlinés) ---
+        const IconPaw = () => (
+            <svg viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6 text-brand-dark">
+                <path d="M8.25 7.5a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0ZM12.75 4.5a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0ZM20.25 7.5a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0ZM16.327 12.873c-1.391-.497-2.736-1.077-4.327-1.077s-2.936.58-4.327 1.077c-2.477.884-4.536 2.825-4.536 5.377 0 1.93 1.57 3.5 3.5 3.5.756 0 1.488-.236 2.1-.652a2.633 2.633 0 0 1 3.264 0c.612.416 1.344.652 2.1.652 1.93 0 3.5-1.57 3.5-3.5 0-2.552-2.059-4.493-4.536-5.377Z" />
+            </svg>
+        );
 
-          return { grille, motsPlaces, phraseSecreteExacte };
-        };
-
-        const peutPlacerMot = (grille, mot, row, col, dir) => {
-          const [dRow, dCol] = dir;
-          for (let i = 0; i < mot.length; i++) {
-            const r = row + i * dRow;
-            const c = col + i * dCol;
-            if (r < 0 || r >= TAILLE_GRILLE || c < 0 || c >= TAILLE_GRILLE) return false;
-            if (grille[r][c] !== '' && grille[r][c].lettre !== mot[i]) return false;
-          }
-          return true;
-        };
-
-        const placerMot = (grille, mot, row, col, dir, motsPlaces) => {
-          const [dRow, dCol] = dir;
-          const cases = [];
-          for (let i = 0; i < mot.length; i++) {
-            const r = row + i * dRow;
-            const c = col + i * dCol;
-            grille[r][c] = { lettre: mot[i], type: 'mot' };
-            cases.push(`${r}-${c}`);
-          }
-          motsPlaces.push({ mot, cases });
-        };
+        const IconDownload = () => (
+            <svg fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5 mr-2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
+            </svg>
+        );
 
         // --- COMPOSANT PRINCIPAL ---
         function App() {
-          const [ongletActif, setOngletActif] = useState(1);
-          const [donneesJeu, setDonneesJeu] = useState(null);
-          
-          useEffect(() => {
-            // Génération initiale
-            setDonneesJeu(genererGrille());
-          }, []);
+            const [activeTab, setActiveTab] = useState('activity'); // 'activity', 'correction', 'teacher'
+            
+            // Puzzle State (généré une seule fois)
+            const puzzle = useMemo(() => generatePuzzle(), []);
+            
+            // Interactivité élève
+            const [foundWords, setFoundWords] = useState([]);
+            const [foundCells, setFoundCells] = useState(new Set());
+            const [selectionLine, setSelectionLine] = useState([]);
+            const [isSelecting, setIsSelecting] = useState(false);
+            const [startCell, setStartCell] = useState(null);
+            
+            // État pour mémoriser les lettres du message secret qui ont été cliquées
+            const [clickedSecretIndices, setClickedSecretIndices] = useState(new Set());
 
-          const exporterPNG = async (elementId, nomFichier) => {
-            if (!window.html2canvas) {
-              alert("La librairie de capture n'est pas encore chargée.");
-              return;
-            }
-            const element = document.getElementById(elementId);
-            if (element) {
-              const canvas = await window.html2canvas(element, {
-                scale: 2, // Haute définition
-                useCORS: true,
-                backgroundColor: '#ffffff'
-              });
-              const link = document.createElement('a');
-              link.download = `${nomFichier}.png`;
-              link.href = canvas.toDataURL('image/png');
-              link.click();
-            }
-          };
+            // Palette de couleurs pour le corrigé
+            const COLORS = ['bg-pastel-blue', 'bg-pastel-pink', 'bg-pastel-yellow', 'bg-pastel-purple', 'bg-pastel-orange'];
 
-          if (!donneesJeu) return <div className="p-10 text-center font-bold text-xl">Génération de l'activité en cours...</div>;
-
-          const { grille, motsPlaces, phraseSecreteExacte } = donneesJeu;
-
-          // Regrouper les mots en 2 colonnes pour l'affichage
-          const motsTriesAlphabetique = [...MOTS_A_TROUVER].sort();
-          const demi = Math.ceil(motsTriesAlphabetique.length / 2);
-          const colonne1 = motsTriesAlphabetique.slice(0, demi);
-          const colonne2 = motsTriesAlphabetique.slice(demi);
-
-          // Style CSS embarqué pour garantir l'impression et les contraintes
-          const stylesImpression = `
-            @media print {
-              body { -webkit-print-color-adjust: exact; print-color-adjust: exact; background: white; }
-              .no-print { display: none !important; }
-              .page-container { border: none !important; margin: 0 !important; box-shadow: none !important; }
-            }
-            .page-container {
-              width: 850px;
-              height: 1100px; /* Format Lettre US strict */
-              margin: 0 auto;
-              background: white;
-              color: black;
-              position: relative;
-              overflow: hidden;
-              box-sizing: border-box;
-              font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-            }
-            .grid-cell {
-              width: 33px;
-              height: 33px;
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              font-size: 17px;
-              font-weight: bold;
-              text-transform: uppercase;
-              border: 1px solid #d1d5db; /* gray-300 */
-            }
-            .corrige-mot {
-              background-color: #e5e7eb; /* gray-200 */
-              color: #374151; /* gray-700 */
-            }
-            .corrige-mystere {
-              font-weight: 900;
-              color: #000;
-              border: 2px solid #000;
-            }
-          `;
-
-          return (
-            <div className="min-h-screen bg-gray-100 p-4 font-sans flex flex-col items-center">
-              <style>{stylesImpression}</style>
-
-              {/* --- MENU DES ONGLETS (Non imprimé, non capturé) --- */}
-              <div className="no-print bg-white p-4 rounded-xl shadow-md flex gap-4 mb-6" data-html2canvas-ignore="true">
-                <button 
-                  onClick={() => setOngletActif(1)} 
-                  className={`px-6 py-2 rounded-lg font-bold border-2 transition-colors ${ongletActif === 1 ? 'bg-black text-white border-black' : 'bg-white text-black border-gray-300 hover:border-black'}`}
-                >
-                  📄 Fiche Élève
-                </button>
-                <button 
-                  onClick={() => setOngletActif(2)} 
-                  className={`px-6 py-2 rounded-lg font-bold border-2 transition-colors ${ongletActif === 2 ? 'bg-black text-white border-black' : 'bg-white text-black border-gray-300 hover:border-black'}`}
-                >
-                  ✅ Corrigé
-                </button>
-                <button 
-                  onClick={() => setOngletActif(3)} 
-                  className={`px-6 py-2 rounded-lg font-bold border-2 transition-colors ${ongletActif === 3 ? 'bg-black text-white border-black' : 'bg-white text-black border-gray-300 hover:border-black'}`}
-                >
-                  🎓 Fiche Enseignant
-                </button>
-              </div>
-
-              {/* --- ONGLET 1 : FICHE ACTIVITÉ --- */}
-              <div className={`${ongletActif === 1 ? 'block' : 'hidden'} flex flex-col items-center w-full`}>
+            const getLine = (start, end) => {
+                const dr = end.r - start.r;
+                const dc = end.c - start.c;
+                const steps = Math.max(Math.abs(dr), Math.abs(dc));
+                if (steps === 0) return [`${start.r},${start.c}`];
                 
-                <button 
-                  data-html2canvas-ignore="true"
-                  onClick={() => exporterPNG('fiche-eleve', 'MotMystere_Rentree_Eleve')}
-                  className="no-print mb-4 px-6 py-3 bg-blue-600 text-white font-bold rounded shadow hover:bg-blue-700 transition flex items-center gap-2"
-                >
-                  <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
-                  Télécharger l'Activité (PNG)
-                </button>
-
-                <div id="fiche-eleve" className="page-container border border-gray-300 shadow-xl p-5 flex flex-col">
-                  
-                  {/* EN-TÊTE ÉLÈVE */}
-                  <div className="flex justify-between items-end border-b-2 border-black pb-3 mb-4">
-                    <div className="flex flex-col gap-2 w-1/2">
-                      <div className="flex items-center gap-2 text-lg">
-                        <span className="font-bold">Prénom :</span>
-                        <div className="flex-1 border-b border-black"></div>
-                      </div>
-                      <div className="flex items-center gap-2 text-lg">
-                        <span className="font-bold">Date :</span>
-                        <div className="flex-1 border-b border-black"></div>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <span className="inline-block border-2 border-black rounded-full px-4 py-1 text-sm font-bold uppercase tracking-wider mb-2">Niveau : {NIVEAU}</span>
-                      <div className="text-sm font-bold flex items-center justify-end gap-1">
-                        <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"></path></svg>
-                        Temps : {TEMPS_ESTIME}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* TITRE DE L'ACTIVITÉ */}
-                  <div className="text-center mb-4">
-                    <h1 className="text-4xl font-black uppercase tracking-widest mb-2 border-black inline-block border-4 px-6 py-1 bg-gray-50">Mot Mystère</h1>
-                    <h2 className="text-xl font-bold italic text-gray-700">Thème : {THEME}</h2>
-                  </div>
-
-                  {/* CONSIGNES */}
-                  <div className="bg-gray-100 border-2 border-dashed border-gray-400 p-3 rounded-lg mb-4 text-base font-medium">
-                    <strong>Consigne :</strong> Trouve et encercle les {MOTS_A_TROUVER.length} mots cachés dans la grille. Ils peuvent être à l'endroit, à l'envers, à la verticale, à l'horizontale ou en diagonale.
-                    <br/>
-                    <strong>Le Message Secret :</strong> Une fois tous les mots trouvés, lis les lettres restantes de gauche à droite et de haut en bas pour découvrir la phrase mystère de la rentrée !
-                  </div>
-
-                  {/* ZONE CENTRALE : GRILLE + MOTS */}
-                  <div className="flex gap-6 w-full flex-1">
-                    
-                    {/* GRILLE */}
-                    <div className="flex-none">
-                      <div className="border-4 border-black inline-block p-1 bg-white">
-                        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${TAILLE_GRILLE}, 1fr)`, gap: '0' }}>
-                          {grille.map((row, r) => row.map((cell, c) => (
-                            <div key={`${r}-${c}`} className="grid-cell bg-white text-black">
-                              {cell.lettre}
-                            </div>
-                          )))}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* BANQUE DE MOTS */}
-                    <div className="flex-1 flex flex-col min-w-0">
-                      <h3 className="text-lg font-bold mb-3 uppercase border-b-2 border-black inline-block w-full">Mots à trouver ({MOTS_A_TROUVER.length})</h3>
-                      <div className="flex gap-2 w-full">
-                        <div className="flex-1 flex flex-col gap-2">
-                          {colonne1.map((mot, i) => (
-                            <div key={i} className="flex items-center gap-2 text-[15px] font-bold">
-                              <div className="w-4 h-4 border-2 border-black rounded-sm flex-none"></div>
-                              <span className="break-words">{mot}</span>
-                            </div>
-                          ))}
-                        </div>
-                        <div className="flex-1 flex flex-col gap-2">
-                          {colonne2.map((mot, i) => (
-                            <div key={i} className="flex items-center gap-2 text-[15px] font-bold">
-                              <div className="w-4 h-4 border-2 border-black rounded-sm flex-none"></div>
-                              <span className="break-words">{mot}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-
-                  </div>
-
-                  {/* ZONE MESSAGE SECRET */}
-                  <div className="mt-auto mb-2 border-t-2 border-black pt-4">
-                    <h3 className="text-lg font-bold uppercase mb-3 text-center">Écris le message secret ici :</h3>
-                    <div className="flex flex-wrap justify-center gap-x-5 gap-y-3 px-2">
-                      {phraseSecreteExacte.split(' ').map((mot, mIdx) => (
-                        <div key={mIdx} className="flex gap-[2px]">
-                          {mot.split('').map((char, cIdx) => (
-                            <div key={cIdx} className="w-6 h-8 border-b-2 border-black flex items-end justify-center pb-1 text-base font-bold text-transparent">
-                              {/* Transparent so the student can write */}
-                              {char}
-                            </div>
-                          ))}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                  
-                </div>
-              </div>
-
-              {/* --- ONGLET 2 : CORRIGÉ --- */}
-              <div className={`${ongletActif === 2 ? 'block' : 'hidden'} flex flex-col items-center w-full`}>
+                // Vérifier si c'est une ligne droite valide (horizontale, verticale, diagonale parfaite)
+                if (Math.abs(dr) !== 0 && Math.abs(dc) !== 0 && Math.abs(dr) !== Math.abs(dc)) return [];
                 
-                <button 
-                  data-html2canvas-ignore="true"
-                  onClick={() => exporterPNG('fiche-corrige', 'MotMystere_Rentree_Corrige')}
-                  className="no-print mb-4 px-6 py-3 bg-green-600 text-white font-bold rounded shadow hover:bg-green-700 transition flex items-center gap-2"
-                >
-                  <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
-                  Télécharger le Corrigé (PNG)
-                </button>
+                const stepR = dr / steps;
+                const stepC = dc / steps;
+                let line = [];
+                for(let i = 0; i <= steps; i++) {
+                    line.push(`${start.r + stepR * i},${start.c + stepC * i}`);
+                }
+                return line;
+            };
 
-                <div id="fiche-corrige" className="page-container border border-gray-300 shadow-xl p-5 flex flex-col">
-                  
-                  {/* EN-TÊTE CORRIGÉ */}
-                  <div className="flex justify-between items-center border-b-2 border-black pb-3 mb-4 bg-black text-white p-3 rounded">
-                    <h1 className="text-2xl font-black uppercase tracking-widest">CORRIGÉ DE L'ENSEIGNANT</h1>
-                    <span className="font-bold text-base">{THEME}</span>
-                  </div>
+            const handlePointerDown = (r, c) => {
+                if (activeTab !== 'activity') return;
+                setIsSelecting(true);
+                setStartCell({r, c});
+                setSelectionLine([`${r},${c}`]);
+            };
 
-                  <div className="text-center mb-5">
-                    <h2 className="text-3xl font-black uppercase tracking-widest border-black inline-block border-4 px-6 py-1 bg-gray-50">Mot Mystère</h2>
-                  </div>
+            const handlePointerEnter = (r, c) => {
+                if (isSelecting && startCell) {
+                    const line = getLine(startCell, {r, c});
+                    setSelectionLine(line);
+                }
+            };
 
-                  <div className="flex gap-6 w-full flex-1">
+            const handlePointerUp = () => {
+                if (!isSelecting) return;
+                setIsSelecting(false);
+                
+                // Gérer le simple clic pour les lettres du message secret
+                if (selectionLine.length === 1) {
+                    const clickedCoord = selectionLine[0];
+                    const secretIndex = puzzle.secretMessageCells.indexOf(clickedCoord);
                     
-                    {/* GRILLE CORRIGÉE */}
-                    <div className="flex-none">
-                      <div className="border-4 border-black inline-block p-1 bg-white">
-                        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${TAILLE_GRILLE}, 1fr)`, gap: '0' }}>
-                          {grille.map((row, r) => row.map((cell, c) => (
-                            <div key={`${r}-${c}`} className={`grid-cell ${cell.type === 'mot' ? 'corrige-mot' : 'corrige-mystere'}`}>
-                              {cell.lettre}
-                            </div>
-                          )))}
-                        </div>
-                      </div>
-                    </div>
+                    if (secretIndex !== -1) {
+                        setClickedSecretIndices(prev => {
+                            const newSet = new Set(prev);
+                            // Si la lettre est déjà sélectionnée, on la retire. Sinon, on l'ajoute.
+                            if (newSet.has(secretIndex)) {
+                                newSet.delete(secretIndex);
+                            } else {
+                                newSet.add(secretIndex);
+                            }
+                            return newSet;
+                        });
+                    }
+                    setSelectionLine([]);
+                    setStartCell(null);
+                    return;
+                }
+                
+                // Vérifier si la sélection correspond à un mot
+                const selectedStringForwards = selectionLine.map(coord => {
+                    const [r, c] = coord.split(',').map(Number);
+                    return puzzle.grid[r][c];
+                }).join('');
+                
+                const selectedStringBackwards = selectedStringForwards.split('').reverse().join('');
 
-                    {/* BANQUE DE MOTS CORRIGÉE */}
-                    <div className="flex-1 flex flex-col min-w-0">
-                      <h3 className="text-lg font-bold mb-3 uppercase border-b-2 border-black inline-block w-full">Mots validés ({MOTS_A_TROUVER.length})</h3>
-                      <div className="flex gap-2 w-full">
-                        <div className="flex-1 flex flex-col gap-2">
-                          {colonne1.map((mot, i) => (
-                            <div key={i} className="flex items-center gap-2 text-[15px] font-bold text-gray-500 line-through">
-                              <div className="w-4 h-4 border-2 border-black rounded-sm flex-none bg-black flex items-center justify-center text-white" style={{ fontSize: '10px' }}>✓</div>
-                              <span className="break-words">{mot}</span>
-                            </div>
-                          ))}
-                        </div>
-                        <div className="flex-1 flex flex-col gap-2">
-                          {colonne2.map((mot, i) => (
-                            <div key={i} className="flex items-center gap-2 text-[15px] font-bold text-gray-500 line-through">
-                              <div className="w-4 h-4 border-2 border-black rounded-sm flex-none bg-black flex items-center justify-center text-white" style={{ fontSize: '10px' }}>✓</div>
-                              <span className="break-words">{mot}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
+                const matchedWordObj = puzzle.placedWords.find(w => 
+                    (w.word === selectedStringForwards || w.word === selectedStringBackwards) &&
+                    !foundWords.includes(w.word)
+                );
 
-                  </div>
+                if (matchedWordObj) {
+                    setFoundWords([...foundWords, matchedWordObj.word]);
+                    setFoundCells(prev => new Set([...prev, ...matchedWordObj.cells]));
+                }
+                
+                setSelectionLine([]);
+                setStartCell(null);
+            };
 
-                  {/* ZONE MESSAGE SECRET CORRIGÉ */}
-                  <div className="mt-auto mb-2 border-t-2 border-black pt-4">
-                    <h3 className="text-lg font-bold uppercase mb-3 text-center">Solution du message secret :</h3>
-                    <div className="flex flex-wrap justify-center gap-x-5 gap-y-3 px-2">
-                      {phraseSecreteExacte.split(' ').map((mot, mIdx) => (
-                        <div key={mIdx} className="flex gap-[2px]">
-                          {mot.split('').map((char, cIdx) => (
-                            <div key={cIdx} className="w-6 h-8 border-b-2 border-black flex items-end justify-center pb-1 text-lg font-black text-black bg-gray-200 rounded-t-sm">
-                              {char}
+            // Fonction d'export PNG (html2canvas)
+            const exportPNG = async () => {
+                const element = document.getElementById('fiche-activite-container');
+                if (!element) return;
+
+                try {
+                    const canvas = await html2canvas(element, {
+                        scale: 2, // Haute résolution
+                        useCORS: true,
+                        backgroundColor: '#ffffff'
+                    });
+                    const dataURL = canvas.toDataURL('image/png');
+                    const link = document.createElement('a');
+                    link.href = dataURL;
+                    link.download = `Mot_Mystere_Activite.png`;
+                    link.click();
+                } catch (err) {
+                    console.error("Erreur lors de la capture : ", err);
+                }
+            };
+
+            const RenderSheet = ({ isCorrection }) => {
+                return (
+                    <div className="responsive-wrapper bg-gray-100">
+                        <div id="fiche-activite-container" className="page-container flex flex-col p-6 border-4 border-brand-dark rounded-xl justify-between">
+                            
+                            {/* En-tête de la fiche */}
+                            <div className="flex justify-between items-center border-b-2 border-brand/30 pb-3 mb-3">
+                                <div className="flex items-center gap-3">
+                                    <div className="bg-brand-light p-2.5 rounded-full border-2 border-brand">
+                                        <IconPaw />
+                                    </div>
+                                    <div>
+                                        <h1 className="font-title text-2xl text-brand-dark tracking-wide leading-none">Mot Mystère</h1>
+                                        <h2 className="font-title text-lg text-brand-dark/70 uppercase leading-tight">Les Animaux</h2>
+                                    </div>
+                                </div>
+                                <div className="flex flex-col gap-1 font-handwriting text-base text-gray-700 w-56">
+                                    <div className="flex items-end gap-2 border-b-2 border-dashed border-gray-400 pb-0.5">
+                                        <span className="font-bold text-xs uppercase">Prénom:</span>
+                                        <span className="flex-1"></span>
+                                    </div>
+                                    <div className="flex items-end gap-2 border-b-2 border-dashed border-gray-400 pb-0.5">
+                                        <span className="font-bold text-xs uppercase">Date:</span>
+                                        <span className="flex-1"></span>
+                                    </div>
+                                </div>
                             </div>
-                          ))}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                  
-                </div>
-              </div>
 
-              {/* --- ONGLET 3 : FICHE ENSEIGNANT --- */}
-              <div className={`${ongletActif === 3 ? 'block' : 'hidden'} w-full max-w-4xl`}>
-                <div className="bg-white p-10 rounded-xl shadow-xl border border-gray-300">
-                  <h1 className="text-3xl font-black mb-6 uppercase border-b-4 border-black pb-2">Notes Pédagogiques</h1>
-                  
-                  <div className="grid grid-cols-2 gap-8 mb-8">
-                    <div className="bg-gray-50 p-6 rounded-lg border border-gray-200">
-                      <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-                        <span className="text-2xl">🎯</span> Objectifs Visés
-                      </h2>
-                      <ul className="list-disc pl-5 space-y-2 text-lg">
-                        <li>Enrichissement du vocabulaire thématique (Rentrée).</li>
-                        <li>Développement de l'attention visuelle et de la concentration.</li>
-                        <li>Repérage spatial complexe (lecture multidirectionnelle).</li>
-                        <li>Résolution de problèmes avec méthode de déduction (lettres restantes).</li>
-                      </ul>
+                            {/* Consignes */}
+                            <div className="bg-brand-light/60 border border-brand/30 rounded-lg p-3 mb-3 text-gray-800 flex items-center gap-3 shadow-sm">
+                                <div className="text-3xl">🔎</div>
+                                <div className="text-sm leading-snug">
+                                    <p className="font-bold text-brand-dark">Mission d'exploration :</p>
+                                    <p className="font-body text-gray-700">
+                                        1. Glisse la souris/doigt pour entourer les <strong className="text-brand-dark font-semibold">20 mots</strong> de la liste.<br/>
+                                        2. Clique sur les <strong className="text-emerald-700 font-semibold">25 lettres restantes</strong> pour révéler le message secret en vert en bas !
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* Zone principale : Grille + Liste */}
+                            <div className="flex flex-1 gap-4 mb-3 items-stretch min-h-0">
+                                {/* Grille */}
+                                <div 
+                                    className="grid-container flex-1 bg-white border-3 border-brand-dark rounded-lg p-2 shadow-sm flex flex-col justify-center"
+                                    onPointerLeave={handlePointerUp}
+                                >
+                                    <div 
+                                        className="grid gap-1 h-full w-full"
+                                        style={{ gridTemplateColumns: `repeat(${GRID_SIZE}, minmax(0, 1fr))` }}
+                                    >
+                                        {puzzle.grid.map((row, r) => row.map((letter, c) => {
+                                            const cellCoord = `${r},${c}`;
+                                            
+                                            // Logique d'affichage selon le mode
+                                            let isFound = isCorrection ? true : foundCells.has(cellCoord);
+                                            let isSelected = !isCorrection && selectionLine.includes(cellCoord);
+                                            let isSecretLetter = isCorrection && puzzle.secretMessageCells.includes(cellCoord);
+                                            
+                                            // Déterminer la couleur de correction / interaction
+                                            let bgColor = 'bg-transparent';
+                                            let textColor = 'text-gray-900';
+                                            let fontWeight = 'font-bold';
+                                            let extraClasses = '';
+
+                                            if (isCorrection) {
+                                                if (isSecretLetter) {
+                                                    bgColor = 'bg-emerald-100 ring-2 ring-emerald-400 shadow-sm';
+                                                    textColor = 'text-emerald-700';
+                                                } else {
+                                                    const wordIndex = puzzle.placedWords.findIndex(w => w.cells.includes(cellCoord));
+                                                    if (wordIndex !== -1) {
+                                                        bgColor = COLORS[wordIndex % COLORS.length];
+                                                        textColor = 'text-gray-800';
+                                                    } else {
+                                                        textColor = 'text-gray-300';
+                                                    }
+                                                }
+                                            } else {
+                                                // Mode Activité
+                                                if (isSelected) bgColor = 'bg-brand/30 rounded-md';
+                                                else if (isFound) bgColor = 'bg-brand/20 rounded-md ring-2 ring-brand/50';
+                                                
+                                                // Colorer en VERT la lettre secrète cliquée
+                                                const secretIdx = puzzle.secretMessageCells.indexOf(cellCoord);
+                                                if (secretIdx !== -1 && clickedSecretIndices.has(secretIdx)) {
+                                                    textColor = 'text-emerald-700';
+                                                    bgColor = 'bg-emerald-100';
+                                                    fontWeight = 'font-extrabold';
+                                                    extraClasses = 'ring-2 ring-emerald-400 scale-95 shadow-inner';
+                                                }
+                                            }
+
+                                            return (
+                                                <div 
+                                                    key={cellCoord}
+                                                    className={`
+                                                        flex items-center justify-center 
+                                                        font-mono text-xl cursor-pointer select-none transition-all duration-150 rounded-sm
+                                                        ${bgColor} ${textColor} ${fontWeight} ${extraClasses}
+                                                    `}
+                                                    onPointerDown={() => handlePointerDown(r, c)}
+                                                    onPointerEnter={() => handlePointerEnter(r, c)}
+                                                    onPointerUp={handlePointerUp}
+                                                >
+                                                    {letter}
+                                                </div>
+                                            );
+                                        }))}
+                                    </div>
+                                </div>
+
+                                {/* Liste des mots - 2 colonnes compactes pour économiser l'espace */}
+                                <div className="w-72 bg-gray-50 rounded-lg border-2 border-gray-200 p-4 flex flex-col">
+                                    <h3 className="font-title text-center text-lg text-gray-700 mb-3 border-b-2 pb-2">Mots à trouver (20)</h3>
+                                    <ul className="grid grid-cols-2 gap-x-3 gap-y-3 font-body text-sm font-semibold text-gray-700 flex-1 content-start">
+                                        {VOCABULARY.map(word => {
+                                            const isWordFound = isCorrection || foundWords.includes(word);
+                                            return (
+                                                <li key={word} className={`flex items-center gap-2 transition-all ${isWordFound ? 'word-strike' : ''}`}>
+                                                    <div className={`w-4 h-4 border-2 rounded flex items-center justify-center flex-shrink-0 transition-colors ${isWordFound ? 'border-brand bg-brand' : 'border-gray-400 bg-white'}`}>
+                                                        {isWordFound && (
+                                                            <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={4}>
+                                                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                                            </svg>
+                                                        )}
+                                                    </div>
+                                                    <span className="truncate">{word}</span>
+                                                </li>
+                                            );
+                                        })}
+                                    </ul>
+                                </div>
+                            </div>
+
+                            {/* Section Message Secret - Zone de dévoilement en Vert */}
+                            <div className="bg-emerald-50/70 border-3 border-dashed border-emerald-500 p-3 rounded-xl text-center shadow-sm">
+                                <div className="flex justify-center items-center gap-2 mb-2">
+                                    <span className="text-xl">✨</span>
+                                    <h3 className="font-title text-lg text-emerald-800 uppercase tracking-wide">Le Message Secret</h3>
+                                    <span className="text-xl">✨</span>
+                                </div>
+                                <div className="flex flex-wrap justify-center gap-4 font-mono text-xl font-bold">
+                                    {/* Affichage structuré du mot mystère */}
+                                    {(() => {
+                                        let charAbsIndex = 0;
+                                        return SECRET_MESSAGE.split(' ').map((word, wIdx) => (
+                                            <div key={wIdx} className="flex gap-1.5 bg-white/80 p-1.5 rounded-lg border border-emerald-200 shadow-sm">
+                                                {word.split('').map((char, cIdx) => {
+                                                    const currentAbsIndex = charAbsIndex++;
+                                                    const isRevealed = isCorrection || clickedSecretIndices.has(currentAbsIndex);
+                                                    return (
+                                                        <div 
+                                                            key={cIdx} 
+                                                            className={`w-7 h-9 border-b-3 border-emerald-600 flex items-center justify-center text-emerald-600 text-2xl font-black transition-all duration-300 ${isRevealed ? 'bg-emerald-100 rounded-t' : ''}`}
+                                                        >
+                                                            {isRevealed ? char : ''}
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        ));
+                                    })()}
+                                </div>
+                            </div>
+
+                        </div>
                     </div>
+                );
+            };
+
+            return (
+                <div className="min-h-screen flex flex-col font-body bg-gray-200">
                     
-                    <div className="bg-gray-50 p-6 rounded-lg border border-gray-200">
-                      <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-                        <span className="text-2xl">⚙️</span> Mécanique du jeu
-                      </h2>
-                      <p className="text-lg leading-relaxed">
-                        Activité auto-corrective par la phrase mystère. L'élève doit encercler les {MOTS_A_TROUVER.length} mots dans la grille. Les lettres qui <strong>ne sont pas</strong> utilisées par les mots forment, lues de gauche à droite et de haut en bas, une phrase complète. Si la phrase n'a pas de sens, l'élève sait qu'il a fait une erreur ou oublié un mot.
-                      </p>
-                    </div>
-                  </div>
+                    {/* UI Navigation (Sera ignorée par html2canvas) */}
+                    <nav className="bg-white shadow-md p-4 sticky top-0 z-50" data-html2canvas-ignore="true">
+                        <div className="max-w-5xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
+                            <div className="flex bg-gray-100 p-1 rounded-lg">
+                                <button 
+                                    onClick={() => setActiveTab('activity')}
+                                    className={`px-6 py-2 rounded-md font-semibold transition-all ${activeTab === 'activity' ? 'bg-brand text-white shadow-sm' : 'text-gray-600 hover:bg-gray-200'}`}
+                                >
+                                    Matériel Élève
+                                </button>
+                                <button 
+                                    onClick={() => setActiveTab('teacher')}
+                                    className={`px-6 py-2 rounded-md font-semibold transition-all ${activeTab === 'teacher' ? 'bg-brand text-white shadow-sm' : 'text-gray-600 hover:bg-gray-200'}`}
+                                >
+                                    Fiche Enseignant
+                                </button>
+                            </div>
+                            
+                            {activeTab === 'activity' && (
+                                <button 
+                                    onClick={exportPNG}
+                                    className="flex items-center bg-gray-800 hover:bg-black text-white px-5 py-2 rounded-lg font-bold transition-colors shadow-lg"
+                                >
+                                    <IconDownload />
+                                    Télécharger en PNG
+                                </button>
+                            )}
+                        </div>
+                    </nav>
 
-                  <div className="bg-black text-white p-6 rounded-lg shadow-inner">
-                    <h2 className="text-xl font-bold mb-2 uppercase tracking-wide text-gray-300">La Phrase Mystère Révélée :</h2>
-                    <p className="text-2xl font-black leading-snug">{phraseSecreteExacte}</p>
-                  </div>
-                  
-                  <div className="mt-8 text-center text-gray-500 italic">
-                    Document généré automatiquement. Prêt pour l'impression format Lettre US.
-                  </div>
+                    {/* Contenu de l'onglet actif */}
+                    <main className="flex-1 flex flex-col overflow-hidden">
+                        
+                        {activeTab === 'activity' && <RenderSheet isCorrection={false} />}
+                        
+                        {activeTab === 'teacher' && (
+                            <div className="max-w-4xl mx-auto p-8 w-full">
+                                <div className="bg-white rounded-xl shadow-xl overflow-hidden">
+                                    <div className="bg-brand-dark p-6 text-white text-center">
+                                        <h2 className="font-title text-3xl mb-2">Fiche Pédagogique Enseignant</h2>
+                                        <p className="opacity-90 font-medium">Activité : Mot Mystère - Thème Les Animaux</p>
+                                    </div>
+                                    <div className="p-8 space-y-8">
+                                        <section>
+                                            <h3 className="text-xl font-bold border-b-2 border-brand pb-2 mb-4">🎯 Objectifs visés</h3>
+                                            <ul className="list-disc pl-6 space-y-2 text-gray-700">
+                                                <li><strong>Orthographe lexicale :</strong> Consolidation des mots se terminant par une consonne muette (D, T).</li>
+                                                <li><strong>Vocabulaire :</strong> Révision du lexique animalier courant.</li>
+                                                <li><strong>Fonctions exécutives :</strong> Attention soutenue, repérage spatial, balayage visuel, et déduction.</li>
+                                            </ul>
+                                        </section>
+                                        
+                                        <section>
+                                            <h3 className="text-xl font-bold border-b-2 border-brand pb-2 mb-4">📚 Liste des mots travaillés (20)</h3>
+                                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 bg-gray-50 p-4 rounded-lg">
+                                                {VOCABULARY.map(w => <div key={w} className="font-medium text-gray-800">{w}</div>)}
+                                            </div>
+                                            <p className="mt-3 text-sm text-gray-500 italic">Astuce d'animation : Demander aux élèves de trouver le féminin des mots de la liste pour entendre la consonne muette (ex: grand/grande, plat/plate, renard/renarde...).</p>
+                                        </section>
+
+                                        <section className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-r-lg">
+                                            <h3 className="text-lg font-bold text-yellow-800 mb-2">🔑 Révélation du Message Secret</h3>
+                                            <p className="text-gray-800 mb-2">La mécanique "lettres restantes" forme la phrase suivante de 25 caractères :</p>
+                                            <div className="text-2xl font-mono font-bold text-red-600 tracking-wider">
+                                                {SECRET_MESSAGE}
+                                            </div>
+                                            <p className="mt-2 text-sm text-yellow-700">Les autres lettres non utilisées par les mots forment un texte de remplissage sans impact sur le jeu.</p>
+                                        </section>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                        
+                    </main>
                 </div>
-              </div>
-
-            </div>
-          );
+            );
         }
 
+        // Rendu de l'application
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<App />);
     </script>
